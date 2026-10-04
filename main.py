@@ -14,8 +14,14 @@ def start_server(app, port):
     serve(app, host='127.0.0.1', port=port, threads=4)
 
 def main():
-    port = 5174
+    port = int(os.environ.get('CLIPFORGE_PORT', '5174'))
     app = create_app()
+
+    # --web mode: serve the app in the browser only (no desktop window)
+    if '--web' in sys.argv:
+        print(f'ClipForge web server running at http://127.0.0.1:{port}')
+        start_server(app, port)
+        return
 
     # Start Flask in background thread
     server_thread = threading.Thread(
