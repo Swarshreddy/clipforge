@@ -1,0 +1,9 @@
+flask>=3.0
+flask-cors>=4.0
+pywebview>=5.0
+python-dotenv>=1.0
+requests>=2.31
+SQLAlchemy>=2.0
+ffmpeg-python>=0.2.0
+uuid6>=2024.7
+waitress>=3.0
