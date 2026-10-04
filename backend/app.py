@@ -24,6 +24,7 @@ def create_app():
     from backend.routes.transcription import transcription_bp
     from backend.routes.analysis import analysis_bp
     from backend.routes.rendering import rendering_bp
+    from backend.routes.youtube import youtube_bp
 
     app.register_blueprint(system_bp, url_prefix='/api')
     app.register_blueprint(projects_bp, url_prefix='/api')
@@ -31,6 +32,7 @@ def create_app():
     app.register_blueprint(transcription_bp, url_prefix='/api')
     app.register_blueprint(analysis_bp, url_prefix='/api')
     app.register_blueprint(rendering_bp, url_prefix='/api')
+    app.register_blueprint(youtube_bp, url_prefix='/api')
 
     # Serve React frontend for non-API routes
     @app.route('/')

@@ -20,6 +20,8 @@ def probe_media(file_path: str) -> dict:
         file_path
     ]
     result = subprocess.run(cmd, capture_output=True, text=True)
+    if result.returncode != 0 or not result.stdout.strip():
+        raise FileNotFoundError(f"ffprobe failed for '{file_path}': {result.stderr.strip()[:200]}")
     data = json.loads(result.stdout)
 
     video_stream = None
