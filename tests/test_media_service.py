@@ -22,6 +22,7 @@ class TestProbeMedia:
             ]
         }'''
         mock_run.return_value = mock_result
+        mock_run.return_value.returncode = 0
 
         result = probe_media('/fake/video.mp4')
         assert result['duration_sec'] == 120.5
@@ -41,6 +42,7 @@ class TestProbeMedia:
             ]
         }'''
         mock_run.return_value = mock_result
+        mock_run.return_value.returncode = 0
 
         result = probe_media('/fake/audio.mp3')
         assert result['has_video'] is False
