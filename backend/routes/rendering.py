@@ -2,6 +2,7 @@ import os
 import uuid
 import json
 import threading
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 
 from flask import Blueprint, jsonify, request, current_app
@@ -9,6 +10,9 @@ from flask import Blueprint, jsonify, request, current_app
 from backend.database import get_db
 
 rendering_bp = Blueprint('rendering', __name__)
+
+# Cap concurrent batch renders so FFmpeg doesn't saturate the CPU.
+_RENDER_EXECUTOR = ThreadPoolExecutor(max_workers=2)
 
 _RENDER_JOBS = {}
 
@@ -169,13 +173,12 @@ def render_batch(project_id):
         )
         db.commit()
 
-        app = current_app._get_current_object()
-        thread = threading.Thread(
-            target=_run_render,
-            args=(app, project_id, clip_id, output_path, candidate['start_sec'], candidate['end_sec'], caption_words, project.get('caption_style', 'classic')),
-            daemon=True
+        _RENDER_EXECUTOR.submit(
+            _run_render,
+            current_app._get_current_object(), project_id, clip_id, output_path,
+            candidate['start_sec'], candidate['end_sec'], caption_words,
+            project.get('caption_style', 'classic'),
         )
-        thread.start()
         clip_ids.append(clip_id)
 
     return jsonify({'clipIds': clip_ids, 'count': len(clip_ids), 'status': 'started'}), 202

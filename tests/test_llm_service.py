@@ -33,6 +33,18 @@ class TestParseCandidates:
         )
         assert len(result) == 1
 
+    def test_parse_unknown_list_key_fallback(self):
+        result = parse_candidates(
+            '{"viral_moments": [{"start": 1.0, "end": 20.0, "score": 80, "hook": "Fallback", "rationale": "Test"}]}'
+        )
+        assert len(result) == 1
+
+    def test_prompt_requests_object_not_array(self):
+        # json_object response_format requires the root to be an object
+        from backend.services.llm_service import ANALYSIS_PROMPT_TEMPLATE
+        assert '"candidates"' in ANALYSIS_PROMPT_TEMPLATE
+        assert 'JSON array only' not in ANALYSIS_PROMPT_TEMPLATE
+
     def test_parse_invalid_raises(self):
         with pytest.raises((ValueError, json.JSONDecodeError)):
             parse_candidates('not valid json')

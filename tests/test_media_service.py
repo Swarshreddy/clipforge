@@ -71,6 +71,22 @@ class TestBuildCaptionFilters:
         # The timestamp should be offset by clip_start=3.0
         assert 'between(t,2.00' in filters[0]
 
+    def test_build_drawtext_filters_escapes_special_chars(self):
+        from backend.services.caption_service import build_drawtext_filters
+        words = [
+            {'text': "100% 'sure', yes: no\\path", 'start': 0.0, 'end': 1.0},
+        ]
+        f = build_drawtext_filters(words, 'classic', 0)[0]
+        # % is doubled for drawtext text expansion
+        assert '100%%' in f
+        # comma, colon and quote are escaped inside the quoted text value
+        assert '\\,' in f
+        assert '\\:' in f
+        # apostrophe is escaped as \' so it does not terminate the quoted string
+        assert "\\'sure\\'" in f
+        # backslash itself is doubled
+        assert 'no\\\\path' in f
+
     def test_styles_contain_required_keys(self):
         from backend.services.caption_service import STYLES
         for style_name, style in STYLES.items():

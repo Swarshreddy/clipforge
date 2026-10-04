@@ -4,16 +4,18 @@ Supports: DeepSeek, Claude, Gemini, OpenAI, OpenRouter, Groq, Ollama, Custom.
 
 Each provider call sends the full transcript to the LLM with a carefully crafted
 prompt that instructs it to find viral moments and return structured JSON:
-[
-  {
-    "start": 45.2,
-    "end": 78.5,
-    "score": 92,
-    "hook": "You won't believe what happened next...",
-    "rationale": "Strong emotional peak with unexpected revelation"
-  },
-  ...
-]
+{
+  "candidates": [
+    {
+      "start": 45.2,
+      "end": 78.5,
+      "score": 92,
+      "hook": "You won't believe what happened next...",
+      "rationale": "Strong emotional peak with unexpected revelation"
+    },
+    ...
+  ]
+}
 """
 
 import os
@@ -80,8 +82,8 @@ IMPORTANT RULES:
 4. Higher score = stronger emotional impact, surprise, humor, or controversy
 5. The hook should be attention-grabbing and make people want to watch
 
-Return your response as a JSON array only, no other text:
-[{{"start": 0.0, "end": 0.0, "score": 0, "hook": "", "rationale": ""}}]
+Return your response as a JSON object containing a "candidates" array, no other text:
+{{"candidates": [{{"start": 0.0, "end": 0.0, "score": 0, "hook": "", "rationale": ""}}]}}
 
 TRANSCRIPT:
 {transcript}"""
@@ -187,6 +189,12 @@ def parse_candidates(response_text: str) -> list:
             if key in parsed:
                 parsed = parsed[key]
                 break
+        else:
+            # Fallback: first top-level key holding a list
+            for value in parsed.values():
+                if isinstance(value, list):
+                    parsed = value
+                    break
     if not isinstance(parsed, list):
         raise ValueError("LLM did not return a valid JSON array of candidates")
     return parsed

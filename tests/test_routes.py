@@ -44,6 +44,24 @@ class TestSystemRoutes:
         assert response.status_code == 200
         assert response.get_json()['ok'] is True
 
+    def test_update_settings_persists_to_env(self, client, app):
+        import tempfile
+        from backend.config import Config
+        from dotenv import dotenv_values
+        response = client.put('/api/settings', json={'DEEPSEEK_API_KEY': 'sk-test-123'})
+        assert response.status_code == 200
+        env_file = os.path.join(Config.get_data_dir(), '.env')
+        assert os.path.exists(env_file)
+        persisted = dotenv_values(env_file) or {}
+        assert persisted.get('DEEPSEEK_API_KEY') == 'sk-test-123'
+        # Also exposed to the runtime env immediately
+        assert os.environ.get('DEEPSEEK_API_KEY') == 'sk-test-123'
+
+    def test_update_settings_ignores_unknown_keys(self, client):
+        response = client.put('/api/settings', json={'MALICIOUS_KEY': 'x', 'LLM_PROVIDER': 'deepseek'})
+        assert response.status_code == 200
+        assert 'MALICIOUS_KEY' not in os.environ
+
     def test_test_connection_missing_key(self, client):
         response = client.post('/api/test-connection', json={'provider': 'openai'})
         assert response.status_code == 200

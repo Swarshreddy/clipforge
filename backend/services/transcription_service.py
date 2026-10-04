@@ -39,53 +39,63 @@ def transcribe_whisper(audio_path: str, model_size: str = 'base') -> dict:
 
 
 def normalize_deepgram(data: dict) -> dict:
-    """Convert Deepgram response to normalized format."""
-    channels = data.get('channels', [])
-    speakers = []
+    """Convert Deepgram response to normalized format.
+
+    Nova-2 nests the payload under results -> channels -> alternatives[0] -> words.
+    Words are grouped into segments by speaker change or silence gap (> 1.2s).
+    """
+    results = data.get('results', {})
+    channels = results.get('channels', [])
+    speakers = set()
     words = []
     segments = []
 
     for channel in channels:
-        channel_idx = channel.get('channel', 0)
-        speaker_label = f"Speaker {channel_idx + 1}"
-        if speaker_label not in speakers:
-            speakers.append(speaker_label)
-
-        for word_data in channel.get('words', []):
+        alts = channel.get('alternatives', [])
+        if not alts:
+            continue
+        alt = alts[0]
+        for w in alt.get('words', []):
+            speaker_idx = w.get('speaker', 0)
+            speaker_label = f"Speaker {speaker_idx + 1}"
+            speakers.add(speaker_label)
             words.append({
-                'text': word_data.get('word', '').strip(),
-                'start': word_data.get('start', 0),
-                'end': word_data.get('end', 0),
+                'text': w.get('word', '').strip(),
+                'start': float(w.get('start', 0)),
+                'end': float(w.get('end', 0)),
                 'speaker': speaker_label
             })
 
-        # Build segments from words
-        current_seg = None
-        for w in words:
-            if current_seg is None or current_seg['speaker'] != w['speaker']:
-                if current_seg:
-                    segments.append(current_seg)
-                current_seg = {
-                    'start': w['start'],
-                    'end': w['end'],
-                    'speaker': w['speaker'],
-                    'text': w['text']
-                }
-            else:
-                current_seg['end'] = w['end']
-                current_seg['text'] += ' ' + w['text']
-        if current_seg:
-            segments.append(current_seg)
+    # Group words into segments by speaker change or silence (> 1.2s gap)
+    current_seg = None
+    for w in words:
+        if (current_seg is None or
+                current_seg['speaker'] != w['speaker'] or
+                (w['start'] - current_seg['end']) > 1.2):
+            if current_seg:
+                segments.append(current_seg)
+            current_seg = {
+                'start': w['start'],
+                'end': w['end'],
+                'speaker': w['speaker'],
+                'text': w['text']
+            }
+        else:
+            current_seg['end'] = w['end']
+            current_seg['text'] += ' ' + w['text']
+    if current_seg:
+        segments.append(current_seg)
 
-    language = data.get('metadata', {}).get('language', 'en')
-    duration = data.get('metadata', {}).get('duration', 0)
+    metadata = data.get('metadata', {})
+    language = metadata.get('language', 'en')
+    duration = metadata.get('duration', 0)
     if isinstance(duration, dict):
         duration = float(duration.get('value', 0))
 
     return {
         'language': language,
         'duration': float(duration),
-        'speakers': speakers,
+        'speakers': sorted(list(speakers)) if speakers else ['Speaker 1'],
         'words': words,
         'segments': segments,
     }

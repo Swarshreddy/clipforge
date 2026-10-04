@@ -85,9 +85,10 @@ def render_portrait_clip(
     os.makedirs(os.path.dirname(output_path) or '.', exist_ok=True)
 
     # Build FFmpeg filter chain
-    # Center-crop: crop=ih*9/16:ih:(iw-ih*9/16)/2:0
+    # Center-crop to 9:16 with an EVEN width so libx264 never sees odd dimensions
+    # (trunc(ih*9/32)*2 = 2 * floor(ih * 9/16 / 2))
     vf_filters = [
-        f"crop=ih*9/16:ih:(iw-ih*9/16)/2:0",
+        "crop=trunc(ih*9/32)*2:ih:(iw-trunc(ih*9/32)*2)/2:0",
         f"scale={width}:{height}:force_original_aspect_ratio=decrease",
         f"pad={width}:{height}:(ow-iw)/2:(oh-ih)/2:black"
     ]
@@ -107,6 +108,7 @@ def render_portrait_clip(
         '-t', str(duration),
         '-vf', vf,
         '-c:v', 'libx264', '-preset', 'medium', '-crf', '23',
+        '-pix_fmt', 'yuv420p',
         '-c:a', 'aac', '-b:a', '128k',
         '-movflags', '+faststart',
         '-y', output_path

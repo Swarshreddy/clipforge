@@ -223,20 +223,24 @@ function NewProjectModal({
   onCreated: (id: string) => void
 }) {
   const { showToast } = useToast()
+  const [mode, setMode] = useState<'file' | 'youtube'>('file')
   const [name, setName] = useState('')
   const [path, setPath] = useState('')
   const [busy, setBusy] = useState(false)
 
-  const submit = async () => {
-    if (!path.trim()) {
-      showToast('error', 'Please enter a media file path')
-      return
-    }
+  // YouTube import state
+  const [ytUrl, setYtUrl] = useState('')
+  const [checking, setChecking] = useState(false)
+  const [copyrightMsg, setCopyrightMsg] = useState<{ ok: boolean; message: string } | null>(null)
+  const [downloading, setDownloading] = useState(false)
+  const [downloadProgress, setDownloadProgress] = useState('')
+
+  const createProject = async (sourcePath: string, projectName?: string) => {
     setBusy(true)
     try {
       const result = await api.createProject({
-        name: name.trim() || 'Untitled Project',
-        sourcePath: path.trim(),
+        name: projectName || name.trim() || 'Untitled Project',
+        sourcePath,
       })
       showToast('success', 'Project created')
       onCreated(result.id)
@@ -246,9 +250,135 @@ function NewProjectModal({
     }
   }
 
+  const submit = async () => {
+    if (!path.trim()) {
+      showToast('error', 'Please enter a media file path')
+      return
+    }
+    await createProject(path.trim())
+  }
+
+  const onFileSelected = (file: File | undefined) => {
+    if (!file) return
+    // pywebview/Electron expose the real path; browsers give a fake path.
+    const realPath = (file as any).path || file.name
+    setPath(realPath)
+    if (!name.trim()) setName(file.name.replace(/\.[^.]+$/, ''))
+  }
+
+  const checkYoutube = async () => {
+    if (!ytUrl.trim()) {
+      showToast('error', 'Please enter a YouTube URL')
+      return
+    }
+    setChecking(true)
+    setCopyrightMsg(null)
+    try {
+      const result: any = await api.checkYoutube(ytUrl.trim())
+      if (result.ok) {
+        setCopyrightMsg({
+          ok: !result.isLikelyCopyrighted,
+          message: `"${result.title || 'Video'}" · ${result.reason || 'Looks good'}`,
+        })
+      } else {
+        setCopyrightMsg({ ok: false, message: result.error || 'Copyright check failed' })
+      }
+    } catch (e: any) {
+      setCopyrightMsg({ ok: false, message: e.message })
+    } finally {
+      setChecking(false)
+    }
+  }
+
+  const downloadYoutube = async () => {
+    if (!ytUrl.trim()) {
+      showToast('error', 'Please enter a YouTube URL')
+      return
+    }
+    if (!copyrightMsg) {
+      setCopyrightMsg({ ok: false, message: 'Run "Check & Download" first so we can verify the video.' })
+      return
+    }
+    setDownloading(true)
+    setDownloadProgress('Starting download...')
+    try {
+      const { jobId } = await api.downloadYoutube(ytUrl.trim())
+      // Poll download status
+      for (let i = 0; i < 600; i++) {
+        await new Promise((r) => setTimeout(r, 1500))
+        const res = await api.getYoutubeDownloadStatus(jobId)
+        if (res.status === 'done' && res.path) {
+          setDownloadProgress('Download complete — creating project...')
+          showToast('success', 'Video downloaded')
+          await createProject(res.path)
+          setDownloading(false)
+          return
+        }
+        if (res.status === 'error') {
+          setDownloadProgress('')
+          showToast('error', res.error || 'Download failed')
+          setDownloading(false)
+          return
+        }
+        setDownloadProgress('Downloading video...')
+      }
+      setDownloading(false)
+      setDownloadProgress('')
+      showToast('error', 'Download timed out')
+    } catch (e: any) {
+      setDownloading(false)
+      setDownloadProgress('')
+      showToast('error', e.message)
+    }
+  }
+
   return (
     <Modal title="New Project" onClose={onClose}>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+        {/* Source tabs */}
+        <div
+          style={{
+            display: 'flex',
+            gap: 4,
+            background: 'var(--bg-tertiary)',
+            padding: 4,
+            borderRadius: 8,
+          }}
+        >
+          <button
+            style={{
+              flex: 1,
+              padding: '8px 0',
+              border: 'none',
+              borderRadius: 6,
+              cursor: 'pointer',
+              fontWeight: 600,
+              fontSize: 13,
+              color: mode === 'file' ? 'var(--text-primary)' : 'var(--text-muted)',
+              background: mode === 'file' ? 'var(--bg-secondary)' : 'transparent',
+            }}
+            onClick={() => setMode('file')}
+          >
+            Local file
+          </button>
+          <button
+            style={{
+              flex: 1,
+              padding: '8px 0',
+              border: 'none',
+              borderRadius: 6,
+              cursor: 'pointer',
+              fontWeight: 600,
+              fontSize: 13,
+              color: mode === 'youtube' ? 'var(--text-primary)' : 'var(--text-muted)',
+              background: mode === 'youtube' ? 'var(--bg-secondary)' : 'transparent',
+            }}
+            onClick={() => setMode('youtube')}
+          >
+            YouTube
+          </button>
+        </div>
+
         <div>
           <label style={labelStyle}>Project name</label>
           <input
@@ -256,27 +386,112 @@ function NewProjectModal({
             placeholder="My awesome podcast episode"
             value={name}
             onChange={(e) => setName(e.target.value)}
-            autoFocus
+            disabled={downloading}
           />
         </div>
-        <div>
-          <label style={labelStyle}>Media file path</label>
-          <input
-            className="input-field"
-            placeholder="/path/to/video.mp4 (MP4, MOV, MKV, MP3, WAV...)"
-            value={path}
-            onChange={(e) => setPath(e.target.value)}
-            style={{ fontFamily: 'var(--font-mono)', fontSize: 13 }}
-            onKeyDown={(e) => e.key === 'Enter' && submit()}
-          />
-          <p style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 6 }}>
-            Enter the full path to a video or audio file on this machine.
-          </p>
-        </div>
-        <button className="btn-accent" onClick={submit} disabled={busy}>
-          {busy ? <div className="spinner" /> : <Plus size={16} />}
-          Create project
-        </button>
+
+        {mode === 'file' ? (
+          <>
+            <div>
+              <label style={labelStyle}>Media file path</label>
+              <input
+                className="input-field"
+                placeholder="/path/to/video.mp4 (MP4, MOV, MKV, MP3, WAV...)"
+                value={path}
+                onChange={(e) => setPath(e.target.value)}
+                style={{ fontFamily: 'var(--font-mono)', fontSize: 13 }}
+                onKeyDown={(e) => e.key === 'Enter' && submit()}
+              />
+              <p style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 6 }}>
+                Enter the full path to a video or audio file on this machine.
+              </p>
+            </div>
+            <div>
+              <label style={labelStyle}>Browse local file</label>
+              <input
+                type="file"
+                accept="video/*,audio/*"
+                onChange={(e) => onFileSelected(e.target.files?.[0])}
+                style={{ fontSize: 13, color: 'var(--text-secondary)' }}
+              />
+            </div>
+            <button className="btn-accent" onClick={submit} disabled={busy}>
+              {busy ? <div className="spinner" /> : <Plus size={16} />}
+              Create project
+            </button>
+          </>
+        ) : (
+          <>
+            <div>
+              <label style={labelStyle}>YouTube URL</label>
+              <input
+                className="input-field"
+                placeholder="https://www.youtube.com/watch?v=..."
+                value={ytUrl}
+                onChange={(e) => setYtUrl(e.target.value)}
+                disabled={downloading}
+              />
+            </div>
+
+            {copyrightMsg && (
+              <div
+                className={`badge ${copyrightMsg.ok ? 'badge-success' : 'badge-error'}`}
+                style={{ padding: '8px 12px', whiteSpace: 'normal' }}
+              >
+                {copyrightMsg.message}
+              </div>
+            )}
+
+            {(downloading || downloadProgress) && (
+              <div>
+                <div
+                  style={{
+                    height: 8,
+                    borderRadius: 4,
+                    background: 'var(--bg-tertiary)',
+                    overflow: 'hidden',
+                    position: 'relative',
+                  }}
+                >
+                  <div
+                    className="progress-bar"
+                    style={{
+                      position: 'absolute',
+                      top: 0,
+                      bottom: 0,
+                      width: downloading ? '45%' : '100%',
+                      background: 'var(--accent-gradient)',
+                    }}
+                  />
+                </div>
+                <p style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 6 }}>
+                  {downloadProgress}
+                </p>
+              </div>
+            )}
+
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button
+                className="btn-secondary"
+                style={{ flex: 1, justifyContent: 'center' }}
+                onClick={checkYoutube}
+                disabled={checking || downloading}
+              >
+                {checking ? <div className="spinner" /> : <Search size={14} />}
+                Check & Download
+              </button>
+              <button
+                className="btn-accent"
+                style={{ flex: 1, justifyContent: 'center' }}
+                onClick={downloadYoutube}
+                disabled={downloading || busy}
+              >
+                {downloading ? <div className="spinner" /> : <Plus size={14} />}
+                Download & Create
+              </button>
+            </div>
+          </>
+        )}
       </div>
     </Modal>
   )

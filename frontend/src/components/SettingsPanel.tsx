@@ -20,10 +20,42 @@ export default function SettingsPanel({ onClose }: { onClose: () => void }) {
   const [provider, setProvider] = useState('deepseek')
   const [testing, setTesting] = useState<string | null>(null)
   const [results, setResults] = useState<Record<string, { ok: boolean; message: string }>>({})
+  const [apiKeys, setApiKeys] = useState<Record<string, string>>({})
+  const [savingKeys, setSavingKeys] = useState(false)
 
   useEffect(() => {
     if (status) setProvider(status.llmProvider)
   }, [status])
+
+  const KEY_FIELDS = [
+    { envKey: 'DEEPSEEK_API_KEY', label: 'DeepSeek API Key', placeholder: 'sk-...' },
+    { envKey: 'DEEPGRAM_API_KEY', label: 'Deepgram API Key', placeholder: 'Your Deepgram key' },
+    { envKey: 'OPENAI_API_KEY', label: 'OpenAI API Key', placeholder: 'sk-...' },
+    { envKey: 'ANTHROPIC_API_KEY', label: 'Anthropic API Key', placeholder: 'sk-ant-...' },
+    { envKey: 'GROQ_API_KEY', label: 'Groq API Key', placeholder: 'gsk_...' },
+  ]
+
+  const saveApiKeys = async () => {
+    const payload: Record<string, string> = {}
+    for (const { envKey } of KEY_FIELDS) {
+      const value = apiKeys[envKey] ?? ''
+      if (value.trim()) payload[envKey] = value.trim()
+    }
+    if (Object.keys(payload).length === 0) {
+      showToast('success', 'Enter a key to save')
+      return
+    }
+    setSavingKeys(true)
+    try {
+      await api.updateSettings(payload)
+      showToast('success', 'API keys saved')
+      setApiKeys({})
+    } catch (e: any) {
+      showToast('error', e.message)
+    } finally {
+      setSavingKeys(false)
+    }
+  }
 
   const testProvider = async (key: string) => {
     setTesting(key)
@@ -163,6 +195,42 @@ export default function SettingsPanel({ onClose }: { onClose: () => void }) {
             <Save size={14} />
             Save provider
           </button>
+        </section>
+
+        {/* API Keys */}
+        <section>
+          <h3 style={sectionTitle}>
+            <KeyRound size={13} style={{ verticalAlign: -1, marginRight: 4 }} />
+            API Keys
+          </h3>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            {KEY_FIELDS.map((field) => (
+              <div key={field.envKey}>
+                <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 4 }}>
+                  {field.label}
+                </label>
+                <input
+                  className="input-field"
+                  type="password"
+                  placeholder={field.placeholder}
+                  value={apiKeys[field.envKey] ?? ''}
+                  onChange={(e) => setApiKeys((prev) => ({ ...prev, [field.envKey]: e.target.value }))}
+                />
+              </div>
+            ))}
+          </div>
+          <button
+            className="btn-accent"
+            style={{ marginTop: 12, width: '100%', justifyContent: 'center' }}
+            onClick={saveApiKeys}
+            disabled={savingKeys}
+          >
+            {savingKeys ? <Loader2 size={14} className="spinner" /> : <Save size={14} />}
+            Save API keys
+          </button>
+          <p style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 8 }}>
+            Keys are stored locally in your ClipForge data directory.
+          </p>
         </section>
 
         {/* Privacy note */}

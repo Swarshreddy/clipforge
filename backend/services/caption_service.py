@@ -31,6 +31,22 @@ STYLES = {
 }
 
 
+def escape_drawtext_text(text: str) -> str:
+    """Escape text for use inside a quoted drawtext value.
+
+    Drawtext has two escaping levels:
+    - filtergraph/option level: \\ ' : , must be backslash-escaped (even inside quotes)
+    - text expansion level (expansion=normal, the default): % is the expansion
+      escape char, so a literal % must be doubled to %%
+    """
+    text = text.replace('\\', '\\\\')
+    text = text.replace("'", "\\'")
+    text = text.replace(':', '\\:')
+    text = text.replace(',', '\\,')
+    text = text.replace('%', '%%')
+    return text
+
+
 def build_drawtext_filters(words: list, style_name: str = 'classic', clip_start: float = 0) -> list:
     """
     Build FFmpeg drawtext filter strings for word-by-word captions.
@@ -48,9 +64,7 @@ def build_drawtext_filters(words: list, style_name: str = 'classic', clip_start:
 
     for i in range(0, len(words), CAPTION_WORDS_PER_CHUNK):
         chunk = words[i:i + CAPTION_WORDS_PER_CHUNK]
-        text = ' '.join(w['text'] for w in chunk)
-        # Escape FFmpeg special characters
-        text = text.replace("'", "'\\\\''").replace(":", "\\\\:")
+        text = escape_drawtext_text(' '.join(w['text'] for w in chunk))
 
         start = chunk[0]['start'] - clip_start
         end = chunk[-1]['end'] - clip_start

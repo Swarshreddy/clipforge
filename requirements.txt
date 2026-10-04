@@ -7,3 +7,6 @@ SQLAlchemy>=2.0
 ffmpeg-python>=0.2.0
 uuid6>=2024.7
 waitress>=3.0
+yt-dlp>=2024.03.10
+openai-whisper>=20231117
+pytest>=8.0

@@ -1,7 +1,18 @@
+import os
 from flask import Blueprint, jsonify, request
+from dotenv import set_key
 from backend.config import Config
 
 system_bp = Blueprint('system', __name__)
+
+# Settings/env names accepted by PUT /settings. Kept explicit so arbitrary
+# data cannot be injected into the environment.
+SETTINGS_KEYS = [
+    'LLM_PROVIDER', 'TRANSCRIPTION_MODE', 'WHISPER_MODEL', 'CAPTION_STYLE',
+    'DEEPSEEK_API_KEY', 'DEEPGRAM_API_KEY', 'OPENAI_API_KEY',
+    'ANTHROPIC_API_KEY', 'GROQ_API_KEY', 'GEMINI_API_KEY',
+    'OPENROUTER_API_KEY', 'CUSTOM_BASE_URL', 'CUSTOM_API_KEY', 'CUSTOM_MODEL',
+]
 
 
 @system_bp.route('/status', methods=['GET'])
@@ -36,11 +47,21 @@ def get_settings():
 
 @system_bp.route('/settings', methods=['PUT'])
 def update_settings():
-    """Update app settings (persisted to .env in data dir)."""
-    import os
+    """Update app settings, persisting them to DATA_DIR/.env so they survive restarts."""
     data = request.get_json() or {}
-    allowed = ['LLM_PROVIDER', 'TRANSCRIPTION_MODE', 'WHISPER_MODEL', 'CAPTION_STYLE']
-    for key in allowed:
+
+    env_file = os.path.join(Config.get_data_dir(), '.env')
+    if not os.path.exists(env_file):
+        os.makedirs(os.path.dirname(env_file), exist_ok=True)
+        open(env_file, 'a').close()
+
+    updated = []
+    for key in SETTINGS_KEYS:
         if key in data:
-            os.environ[key] = str(data[key])
-    return jsonify({'ok': True})
+            value = data[key]
+            if value is not None:
+                os.environ[key] = str(value)
+                set_key(env_file, key, str(value))
+                updated.append(key)
+
+    return jsonify({'ok': True, 'updated': updated})

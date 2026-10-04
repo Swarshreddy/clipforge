@@ -4,7 +4,11 @@ from flask_cors import CORS
 from dotenv import load_dotenv
 
 def create_app():
+    # Load project root .env first, then DATA_DIR/.env with override so settings
+    # saved from the UI (persisted to DATA_DIR/.env) win on restart.
     load_dotenv()
+    from backend.config import Config
+    load_dotenv(os.path.join(Config.get_data_dir(), '.env'), override=True)
 
     app = Flask(
         __name__,
